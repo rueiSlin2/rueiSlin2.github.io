@@ -1,0 +1,130 @@
+---
+---
+title: "Coursera Project - Practical Machine Learning"
+author: "Ruei Shiuan Lin"
+date: "2/1/2019"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+The downloaded datasets contain many missing values and case-specific information columns. Thus, it is necessary to do data preprocessing before using it. In this project, three prediction engines, i.e. random forest, classification tree, and boosted, are trained and validated. The random forest predictor has the best accuracy and is used for the prediction quiz.
+
+```{r}
+# Load "caret" package and two downloaded data files
+library(caret)
+setwd("~/Downloads")
+trainData <- read.csv("pml-training (1).csv")
+testData <- read.csv("pml-testing (1).csv")
+```
+
+## A glance at the datasets
+The first seven columns contain personal information, case number, date/time, ... The missing values (NA, "", and "#DIV/0!") are found in most rows. It would be better for training the model using the column variables without any missing values (please see "Preprocessing the training data").
+
+```{r}
+# A quick look at the datasets
+str(trainData)
+str(testData)
+unique(trainData$user_name)
+unique(testData$user_name)
+```
+
+## The "training" dataset partition for model validation
+I divide the new training dataset into training portion (75%) and validation portion (25%).
+```{r}
+# Data partition for training and validation
+inTrain <- createDataPartition(trainData$classe, p = 3/4)[[1]]
+Training <- trainData[inTrain,]
+Testing <- trainData[-inTrain,]
+```
+
+## Preprocessing the training data
+Three preprocessing are taken for the training and validation datasets: removing the first seven columns, replacing missing values with NA, and removing the columns containing NA.
+```{r}
+# Remove the first seven columns
+TrainClean <- Training[, -c(1:7)]
+TestClean <- Testing[, -c(1:7)]
+# Assign "NA" to missing values
+TrainClean[TrainClean == ""] <- NA
+TrainClean[TrainClean == "#DIV/0!"] <- NA
+TrainClean[TrainClean == "<NA>"] <- NA
+TestClean[TestClean == ""] <- NA
+TestClean[TestClean == "#DIV/0!"] <- NA
+TestClean[TestClean == "<NA>"] <- NA
+# Remove columns containing "NA"
+col.has.na <- apply(TrainClean, 2, function(x){any(is.na(x))})
+TrainCleanXna <- TrainClean[,!col.has.na]
+col.has.na2 <- apply(TestClean, 2, function(x){any(is.na(x))})
+TestCleanXna <- TestClean[,!col.has.na2]
+```
+
+## The random forest prediction and its validation
+At first, I train a random forest predictor and perform a validation to find its accuracy.
+```{r}
+# Training a random forest predictor
+set.seed(5678)
+modelFitRF <- train(classe~., data = TrainCleanXna, method = "rf")
+modelFitRF
+# Validating the random forest model
+testpredRF <- predict(modelFitRF, newdata = TestCleanXna)
+confMatRF <- confusionMatrix(testpredRF, TestCleanXna$classe)
+confMatRF
+```
+The accuracy is pretty good. After checking the other two methods, I decided to use this random forest predictor for the project prediction quiz.
+
+## The classification tree prediction and its validation
+Next, a classification tree predictor is constructed and validated.
+```{r}
+# Training a classification tree predictor
+trControl <- trainControl(method = "cv", number = 5)
+modelFitCT <- train(classe~., data = TrainCleanXna, method = "rpart", trControl=trControl)
+modelFitCT
+# Validating the classification tree model
+testpredCT <- predict(modelFitCT, newdata = TestCleanXna)
+confMatCT <- confusionMatrix(testpredCT, TestCleanXna$classe)
+confMatCT
+```
+The accuracy is much less than the random forest model.
+
+## The boosted prediction and its validation
+Finally, a boosted predictor is constructed and validated.
+```{r}
+# Training a boosted predictor
+modelFitGM <- train(classe~., data = TrainCleanXna, method = "gbm", verbose = FALSE)
+```
+Now let's see the model and its validation.
+```{r}
+modelFitGM
+# Validating the boosted model
+testpredGM <- predict(modelFitGM, newdata = TestCleanXna)
+confMatGM <- confusionMatrix(testpredGM, TestCleanXna$classe)
+confMatGM
+```
+The accuracy is pretty good but is not better than the random forest model.
+
+## preprocessing the testing data
+Now the random forest predictor will be used for the prediction quiz.
+```{r}
+# Preprocessing and transforming the test data for the prediciton quiz
+toPredDataClean <- testData[, -c(1:7)]
+toPredDataClean[toPredDataClean == ""] <- NA
+toPredDataClean[toPredDataClean == "#DIV/0!"] <- NA
+toPredDataClean[toPredDataClean == "<NA>"] <- NA
+col.has.na <- apply(toPredDataClean, 2, function(x){any(is.na(x))})
+toPredDataCleanXna <- toPredDataClean[,!col.has.na]
+```
+
+## The testing data prediction by the random forest model
+The final answer is as followed.
+```{r}
+# Answering the project prediction quiz
+predResult <- predict(modelFitRF, newdata = toPredDataCleanXna)
+predResult
+```
+
+## Reference
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
